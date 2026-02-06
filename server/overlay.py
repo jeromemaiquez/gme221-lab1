@@ -54,8 +54,21 @@ FROM overlay
 GROUP BY parcel_pin, name, intersect_geom
 """
 
-# Fetch overlay results into GeoDataFrame
+# Fetch overlay results into GeoDataFrame and check results
 overlay_result = gpd.read_postgis(sql_overlay, engine, geom_col="intersect_geom")
+# print(overlay_result.head(10))
 
-print(overlay_result.head(10))
+# Calculate total area of each parcel
+parcel['total_area'] = parcel.geometry.area
 
+# Merge overlay result with parcels to get total parcel area
+overlay_result = overlay_result.merge(parcel[["parcel_pin", "total_area"]], on="parcel_pin")
+
+# Calculate the percentage of each landuse type within each parcel
+overlay_result["percentage"] = round((overlay_result["landuse_area"] / overlay_result["total_area"]) * 100, 2)
+
+# Ensure the correct geometry is set
+overlay_result = overlay_result.set_geometry("intersect_geom")
+
+# Save the result to the PostGIS database as a new table
+overlay_result.to_postgis("parcel_landuse_percentage", engine, if_exists="replace", index=True)
